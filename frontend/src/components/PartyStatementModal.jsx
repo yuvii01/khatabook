@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Printer,
@@ -11,6 +11,9 @@ import {
   Check,
   RefreshCw,
   Edit2,
+  ArrowDown,
+  ArrowUp,
+  ArrowDownUp,
 } from 'lucide-react';
 import {
   getTransactions,
@@ -33,6 +36,11 @@ export default function PartyStatementModal({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [copiedReminder, setCopiedReminder] = useState(false);
+  // Default to Passbook Order (Oldest first at top, Newest at bottom)
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  const scrollContainerRef = useRef(null);
+  const tableBottomRef = useRef(null);
 
   const fetchLedger = async () => {
     if (!party) return;
@@ -53,17 +61,32 @@ export default function PartyStatementModal({
     }
   }, [isOpen, party, refreshTrigger]);
 
+  // When ledger is loaded in Passbook order, smoothly scroll to latest entry
+  useEffect(() => {
+    if (sortOrder === 'asc' && transactions.length > 0 && scrollContainerRef.current) {
+      setTimeout(() => {
+        if (tableBottomRef.current) {
+          tableBottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
+    }
+  }, [transactions, sortOrder, refreshTrigger]);
+
   if (!isOpen || !party) return null;
 
   // 1. Sort all transactions chronologically (oldest to newest)
   // Handles same-date transactions with sub-second / createdAt precision
   const allSortedChronological = [...transactions].sort((a, b) => {
-    const timeA = new Date(a.date).getTime();
-    const timeB = new Date(b.date).getTime();
-    if (timeA !== timeB) return timeA - timeB;
+    // Compare transaction date (calendar day)
+    const dateA = a.date ? new Date(a.date).toISOString().slice(0, 10) : '';
+    const dateB = b.date ? new Date(b.date).toISOString().slice(0, 10) : '';
+    if (dateA !== dateB) return dateA.localeCompare(dateB);
+
+    // If on same calendar day, sort by exact creation timestamp (createdAt)
     const createA = new Date(a.createdAt || a.date).getTime();
     const createB = new Date(b.createdAt || b.date).getTime();
     if (createA !== createB) return createA - createB;
+
     return String(a._id || '').localeCompare(String(b._id || ''));
   });
 
@@ -98,6 +121,7 @@ export default function PartyStatementModal({
   }
 
   // 4. Compute running balance forward in chronological order
+  // Every entry receives its true, historical "balance of that time"
   let running = initialBalanceForPeriod;
   const ledgerRows = inRangeTxns.map((t) => {
     const amt = Number(t.amount || 0);
@@ -106,10 +130,10 @@ export default function PartyStatementModal({
 
     if (t.type === 'YOU_GAVE' || t.type === 'SALE_BILL') {
       gave = amt;
-      running += gave;
+      running += gave; // Giving money/goods increases receivable (+)
     } else if (t.type === 'YOU_GOT' || t.type === 'PURCHASE_BILL') {
       got = amt;
-      running -= got;
+      running -= got;  // Receiving payment decreases receivable (-)
     }
 
     return {
@@ -120,8 +144,10 @@ export default function PartyStatementModal({
     };
   });
 
-  // 5. Reverse for display so the most recent entry is at the top
-  const displayRows = [...ledgerRows].reverse();
+  // 5. Display order:
+  // - 'asc' (Passbook / Register default): Oldest entry on top, newest at bottom (last row gets updated)
+  // - 'desc': Newest entry at top
+  const displayRows = sortOrder === 'desc' ? [...ledgerRows].reverse() : [...ledgerRows];
 
   // Period totals
   const totalGivenInPeriod = inRangeTxns.reduce(
@@ -168,6 +194,18 @@ export default function PartyStatementModal({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const scrollToBottom = () => {
+    if (tableBottomRef.current) {
+      tableBottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const scrollToTop = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const generateWhatsAppMessage = () => {
@@ -320,11 +358,11 @@ export default function PartyStatementModal({
           </div>
         </div>
 
-        {/* Date Filter & Status */}
-        <div className="px-5 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between text-xs text-slate-600 print:hidden">
-          <div className="flex items-center gap-2">
+        {/* Date Filter & View Order Controls */}
+        <div className="px-5 py-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span>Filter Dates:</span>
+            <span>Dates:</span>
             <input
               type="date"
               value={startDate}
@@ -351,7 +389,46 @@ export default function PartyStatementModal({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            {/* Passbook Order vs Newest First Toggle */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSortOrder('asc')}
+                className={`px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1 ${
+                  sortOrder === 'asc'
+                    ? 'bg-white text-emerald-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Passbook Order: Start at Top (Opening Balance), Newest entry is the Last Row at the bottom"
+              >
+                <span>Passbook Order (Oldest First)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortOrder('desc')}
+                className={`px-2.5 py-1 rounded-md font-bold transition flex items-center gap-1 ${
+                  sortOrder === 'desc'
+                    ? 'bg-white text-emerald-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Newest First: Most recent entry shown on Row 1"
+              >
+                <span>Newest First</span>
+              </button>
+            </div>
+
+            {sortOrder === 'asc' && inRangeTxns.length > 3 && (
+              <button
+                onClick={scrollToBottom}
+                className="px-2 py-1 text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-md border border-slate-200 flex items-center gap-1 transition"
+                title="Scroll down to the latest entry"
+              >
+                <ArrowDown className="w-3 h-3" />
+                <span>Jump to Latest</span>
+              </button>
+            )}
+
             <span className="text-[11px] text-slate-500">
               Total {inRangeTxns.length} entries
             </span>
@@ -366,7 +443,7 @@ export default function PartyStatementModal({
         </div>
 
         {/* Ledger Table */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="py-12 text-center text-slate-400 text-sm">
               Loading ledger statements...
@@ -374,7 +451,7 @@ export default function PartyStatementModal({
           ) : (
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                <tr className="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200 sticky top-0 z-10 shadow-xs">
                   <th className="py-2.5 px-3">Date</th>
                   <th className="py-2.5 px-3">Entry Details / Particulars</th>
                   <th className="py-2.5 px-3">Payment Mode</th>
@@ -385,8 +462,58 @@ export default function PartyStatementModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {/* Transaction Rows (Newest to Oldest) */}
-                {displayRows.map((txn) => {
+                {/* When in Passbook Order (asc): Opening Balance is ROW 1 (The starting point) */}
+                {sortOrder === 'asc' && (
+                  <tr className="bg-amber-50/60 border-b-2 border-dashed border-amber-200 font-medium text-slate-700">
+                    <td className="py-3 px-3 whitespace-nowrap text-slate-500 font-medium">
+                      {openingRowDate}
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                        <span>{startDate ? `Opening Balance (Before ${startDate})` : 'Opening Khata Balance'}</span>
+                      </div>
+                      <p className="text-[10px] text-amber-800/80 mt-0.5">
+                        Starting balance recorded when account was opened
+                      </p>
+                    </td>
+                    <td className="py-3 px-3 text-slate-400 font-medium">-</td>
+                    <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
+                    <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
+                    <td className="py-3 px-3 text-right">
+                      <div
+                        className={`font-black text-sm ${
+                          initialBalanceForPeriod > 0
+                            ? 'text-emerald-700'
+                            : initialBalanceForPeriod < 0
+                            ? 'text-rose-700'
+                            : 'text-slate-600'
+                        }`}
+                      >
+                        ₹{Math.abs(initialBalanceForPeriod).toLocaleString('en-IN')}
+                      </div>
+                      <div
+                        className={`text-[9px] font-bold uppercase tracking-wider ${
+                          initialBalanceForPeriod > 0
+                            ? 'text-emerald-600'
+                            : initialBalanceForPeriod < 0
+                            ? 'text-rose-600'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {initialBalanceForPeriod > 0
+                          ? "You'll Get"
+                          : initialBalanceForPeriod < 0
+                          ? "You'll Give"
+                          : 'Settled'}
+                      </div>
+                    </td>
+                    <td className="py-3 px-2 text-center text-slate-300 print:hidden">-</td>
+                  </tr>
+                )}
+
+                {/* Transaction Rows */}
+                {displayRows.map((txn, index) => {
                   const txnDateStr = new Date(txn.date).toLocaleDateString('en-IN', {
                     day: '2-digit',
                     month: 'short',
@@ -400,29 +527,48 @@ export default function PartyStatementModal({
                       })
                     : null;
 
+                  const isLatestRow = sortOrder === 'asc' && index === displayRows.length - 1;
+
                   return (
                     <tr
                       key={txn._id}
-                      className="hover:bg-slate-50 transition duration-150"
+                      className={`hover:bg-slate-50 transition duration-150 ${
+                        isLatestRow ? 'bg-emerald-50/20' : ''
+                      }`}
                     >
                       <td className="py-3 px-3 font-medium text-slate-600 whitespace-nowrap">
-                        <div>{txnDateStr}</div>
+                        <div className="font-semibold text-slate-800">{txnDateStr}</div>
                         {timeStr && (
                           <div className="text-[10px] text-slate-400 font-normal">{timeStr}</div>
                         )}
                       </td>
 
                       <td className="py-3 px-3">
-                        <div className="font-semibold text-slate-800">
-                          {txn.type === 'YOU_GOT'
-                            ? 'Payment Received (You Got)'
-                            : txn.type === 'YOU_GAVE'
-                            ? 'Payment Given (You Give)'
-                            : txn.type === 'SALE_BILL'
-                            ? 'Sale Bill'
-                            : txn.type === 'PURCHASE_BILL'
-                            ? 'Purchase Bill'
-                            : txn.type.replace('_', ' ')}
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`font-bold ${
+                              txn.type === 'YOU_GOT'
+                                ? 'text-emerald-800'
+                                : txn.type === 'YOU_GAVE'
+                                ? 'text-rose-800'
+                                : 'text-slate-800'
+                            }`}
+                          >
+                            {txn.type === 'YOU_GOT'
+                              ? 'Payment Received (You Got)'
+                              : txn.type === 'YOU_GAVE'
+                              ? 'Payment Given (You Give)'
+                              : txn.type === 'SALE_BILL'
+                              ? 'Sale Bill'
+                              : txn.type === 'PURCHASE_BILL'
+                              ? 'Purchase Bill'
+                              : txn.type.replace('_', ' ')}
+                          </span>
+                          {isLatestRow && (
+                            <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-300">
+                              Latest
+                            </span>
+                          )}
                         </div>
                         {txn.description && (
                           <p className="text-[11px] text-slate-500 mt-0.5">
@@ -430,12 +576,12 @@ export default function PartyStatementModal({
                           </p>
                         )}
                         {txn.referenceNumber && (
-                          <span className="inline-block text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded mr-1">
+                          <span className="inline-block text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded mr-1 mt-0.5">
                             Ref: {txn.referenceNumber}
                           </span>
                         )}
                         {txn.isRouted && (
-                          <span className="inline-flex items-center gap-1 text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-semibold">
+                          <span className="inline-flex items-center gap-1 text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-semibold mt-0.5">
                             <Sparkles className="w-2.5 h-2.5" /> Routed Transfer
                           </span>
                         )}
@@ -495,57 +641,59 @@ export default function PartyStatementModal({
                   );
                 })}
 
-                {/* Opening Balance Row */}
-                <tr className="bg-amber-50/50 border-t-2 border-dashed border-amber-200/80 font-medium text-slate-700">
-                  <td className="py-3 px-3 whitespace-nowrap text-slate-500">
-                    {openingRowDate}
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="font-bold text-amber-950 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
-                      <span>{startDate ? `Opening Balance (Before ${startDate})` : 'Opening Khata Balance'}</span>
-                    </div>
-                    <p className="text-[10px] text-amber-800/80 mt-0.5">
-                      Initial balance recorded when account was opened
-                    </p>
-                  </td>
-                  <td className="py-3 px-3 text-slate-400 font-medium">-</td>
-                  <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
-                  <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
-                  <td className="py-3 px-3 text-right">
-                    <div
-                      className={`font-black text-sm ${
-                        initialBalanceForPeriod > 0
-                          ? 'text-emerald-700'
+                {/* When in Newest First order (desc): Opening Balance is the LAST row at the bottom */}
+                {sortOrder === 'desc' && (
+                  <tr className="bg-amber-50/60 border-t-2 border-dashed border-amber-200 font-medium text-slate-700">
+                    <td className="py-3 px-3 whitespace-nowrap text-slate-500 font-medium">
+                      {openingRowDate}
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                        <span>{startDate ? `Opening Balance (Before ${startDate})` : 'Opening Khata Balance'}</span>
+                      </div>
+                      <p className="text-[10px] text-amber-800/80 mt-0.5">
+                        Initial balance recorded when account was opened
+                      </p>
+                    </td>
+                    <td className="py-3 px-3 text-slate-400 font-medium">-</td>
+                    <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
+                    <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
+                    <td className="py-3 px-3 text-right">
+                      <div
+                        className={`font-black text-sm ${
+                          initialBalanceForPeriod > 0
+                            ? 'text-emerald-700'
+                            : initialBalanceForPeriod < 0
+                            ? 'text-rose-700'
+                            : 'text-slate-600'
+                        }`}
+                      >
+                        ₹{Math.abs(initialBalanceForPeriod).toLocaleString('en-IN')}
+                      </div>
+                      <div
+                        className={`text-[9px] font-bold uppercase tracking-wider ${
+                          initialBalanceForPeriod > 0
+                            ? 'text-emerald-600'
+                            : initialBalanceForPeriod < 0
+                            ? 'text-rose-600'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        {initialBalanceForPeriod > 0
+                          ? "You'll Get"
                           : initialBalanceForPeriod < 0
-                          ? 'text-rose-700'
-                          : 'text-slate-600'
-                      }`}
-                    >
-                      ₹{Math.abs(initialBalanceForPeriod).toLocaleString('en-IN')}
-                    </div>
-                    <div
-                      className={`text-[9px] font-bold uppercase tracking-wider ${
-                        initialBalanceForPeriod > 0
-                          ? 'text-emerald-600'
-                          : initialBalanceForPeriod < 0
-                          ? 'text-rose-600'
-                          : 'text-slate-500'
-                      }`}
-                    >
-                      {initialBalanceForPeriod > 0
-                        ? "You'll Get"
-                        : initialBalanceForPeriod < 0
-                        ? "You'll Give"
-                        : 'Settled'}
-                    </div>
-                  </td>
-                  <td className="py-3 px-2 text-center text-slate-300 print:hidden">-</td>
-                </tr>
+                          ? "You'll Give"
+                          : 'Settled'}
+                      </div>
+                    </td>
+                    <td className="py-3 px-2 text-center text-slate-300 print:hidden">-</td>
+                  </tr>
+                )}
               </tbody>
 
-              {/* Summary / Total Footer */}
-              <tfoot className="bg-slate-100/90 font-bold border-t-2 border-slate-300 text-xs">
+              {/* Anchor for auto-scroll to bottom */}
+              <tfoot ref={tableBottomRef} className="bg-slate-100/90 font-bold border-t-2 border-slate-300 text-xs">
                 <tr>
                   <td colSpan={3} className="py-2.5 px-3 text-slate-700">
                     Period Total ({inRangeTxns.length} entries)
@@ -589,9 +737,18 @@ export default function PartyStatementModal({
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 print:hidden">
-          <span>
-            KM Stonex Khata • Certified Double Entry Accounting
-          </span>
+          <div className="flex items-center gap-2">
+            <span>KM Stonex Khata • Certified Double Entry Accounting</span>
+            {sortOrder === 'asc' && (
+              <button
+                type="button"
+                onClick={scrollToTop}
+                className="text-stone-500 hover:text-stone-800 hover:underline flex items-center gap-0.5 text-[11px] ml-2"
+              >
+                <ArrowUp className="w-3 h-3" /> Back to Top
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition"
