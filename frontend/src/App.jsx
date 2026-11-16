@@ -18,6 +18,7 @@ export default function App() {
   const [parties, setParties] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [statementRefreshKey, setStatementRefreshKey] = useState(0);
 
   const [isRoutePaymentOpen, setIsRoutePaymentOpen] = useState(false);
   const [isAddPartyOpen, setIsAddPartyOpen] = useState(false);
@@ -44,6 +45,7 @@ export default function App() {
         );
         if (updated) setSelectedPartyForLedger(updated);
       }
+      setStatementRefreshKey((prev) => prev + 1);
     } catch (err) {
       console.error('Failed to load application data:', err);
     } finally {
@@ -145,6 +147,21 @@ export default function App() {
         </p>
       </footer>
 
+      {/* Base Modal: Party details / Statement (z-50) */}
+      <PartyStatementModal
+        isOpen={Boolean(selectedPartyForLedger)}
+        onClose={() => setSelectedPartyForLedger(null)}
+        party={selectedPartyForLedger}
+        onAddTransaction={handleOpenAddTxn}
+        onRefreshParties={loadAllData}
+        refreshTrigger={statementRefreshKey}
+        onEditParty={(p) => {
+          setSelectedPartyForLedger(null);
+          handleOpenEditParty(p);
+        }}
+      />
+
+      {/* Higher Z-Index Action Modals (z-[70]) - Rendered on top of Party Statement */}
       <RoutePaymentModal
         isOpen={isRoutePaymentOpen}
         onClose={() => setIsRoutePaymentOpen(false)}
@@ -166,18 +183,6 @@ export default function App() {
         onSuccess={loadAllData}
         defaultPartyId={defaultTxnPartyId}
         defaultType={defaultTxnType}
-      />
-
-      <PartyStatementModal
-        isOpen={Boolean(selectedPartyForLedger)}
-        onClose={() => setSelectedPartyForLedger(null)}
-        party={selectedPartyForLedger}
-        onAddTransaction={handleOpenAddTxn}
-        onRefreshParties={loadAllData}
-        onEditParty={(p) => {
-          setSelectedPartyForLedger(null);
-          handleOpenEditParty(p);
-        }}
       />
 
       <BackupModal

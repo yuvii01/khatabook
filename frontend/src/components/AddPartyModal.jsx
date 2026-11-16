@@ -95,7 +95,7 @@ export default function AddPartyModal({ isOpen, onClose, onSuccess, initialParty
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-stone-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
       <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-stone-200 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200">
         <div className="bg-[#0b1f1a] p-5 text-white flex items-center justify-between border-b border-emerald-900/60">
           <div className="flex items-center gap-3">

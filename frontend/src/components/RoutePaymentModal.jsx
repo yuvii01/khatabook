@@ -135,7 +135,7 @@ export default function RoutePaymentModal({ isOpen, onClose, parties, onSuccess 
   const selectedSource = parties.find((p) => String(p._id) === String(sourcePartyId));
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
       <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full border border-slate-200 overflow-hidden">
         <div className="bg-emerald-700 p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -257,7 +257,8 @@ export default function RoutePaymentModal({ isOpen, onClose, parties, onSuccess 
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg outline-none"
-                />
+                >
+                </input>
               </div>
             </div>
           </div>

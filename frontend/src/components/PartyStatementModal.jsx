@@ -26,6 +26,7 @@ export default function PartyStatementModal({
   onAddTransaction,
   onRefreshParties,
   onEditParty,
+  refreshTrigger,
 }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -50,7 +51,7 @@ export default function PartyStatementModal({
     if (isOpen && party) {
       fetchLedger();
     }
-  }, [isOpen, party]);
+  }, [isOpen, party, refreshTrigger]);
 
   if (!isOpen || !party) return null;
 

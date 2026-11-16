@@ -109,7 +109,9 @@ export default function AddTransactionModal({
         items: showItemized ? items : [],
       });
 
-      onSuccess();
+      if (onSuccess) {
+        await onSuccess();
+      }
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to record entry');
@@ -121,7 +123,7 @@ export default function AddTransactionModal({
   const selectedParty = parties.find((p) => String(p._id) === String(party));
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-stone-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
       <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-stone-200 overflow-hidden transform transition-all animate-in fade-in zoom-in-95 duration-200">
         <div className="bg-[#0b1f1a] p-5 text-white flex items-center justify-between border-b border-emerald-900/60">
           <div className="flex items-center gap-3">
