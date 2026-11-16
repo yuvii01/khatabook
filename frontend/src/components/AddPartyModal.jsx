@@ -83,7 +83,9 @@ export default function AddPartyModal({ isOpen, onClose, onSuccess, initialParty
         await createParty(payload);
       }
 
-      onSuccess();
+      if (onSuccess) {
+        await onSuccess();
+      }
       onClose();
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to save party');
@@ -238,7 +240,7 @@ export default function AddPartyModal({ isOpen, onClose, onSuccess, initialParty
                   type="number"
                   min="0"
                   step="any"
-                  placeholder="0"
+                  placeholder="0 (Settled)"
                   value={openingBalance}
                   onChange={(e) => setOpeningBalance(e.target.value)}
                   className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"

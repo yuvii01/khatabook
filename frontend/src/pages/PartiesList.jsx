@@ -19,23 +19,31 @@ export default function PartiesList({
   const [search, setSearch] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('all');
 
+  const receivableCount = parties.filter((p) => (p.currentBalance || 0) > 0).length;
+  const payableCount = parties.filter((p) => (p.currentBalance || 0) < 0).length;
+  const settledCount = parties.filter((p) => (p.currentBalance || 0) === 0).length;
+
   const filtered = parties
     .filter((p) => {
       const bal = Number(p.currentBalance || 0);
+      const q = search.trim().toLowerCase();
 
-      // Do not show settled accounts (zero balance)
-      if (balanceFilter !== 'settled' && bal === 0) return false;
-      if (balanceFilter === 'receivable' && bal <= 0) return false;
-      if (balanceFilter === 'payable' && bal >= 0) return false;
-      if (balanceFilter === 'settled' && bal !== 0) return false;
+      // If user typed a search query, search across all parties
+      if (q) {
+        const matchesName = p.name && p.name.toLowerCase().includes(q);
+        const matchesCompany = p.companyName && p.companyName.toLowerCase().includes(q);
+        const matchesPhone = p.phone && p.phone.includes(q);
+        const matchesGstin = p.gstin && p.gstin.toLowerCase().includes(q);
+        return matchesName || matchesCompany || matchesPhone || matchesGstin;
+      }
 
-      const q = search.toLowerCase();
-      const matchesName = p.name.toLowerCase().includes(q);
-      const matchesCompany = p.companyName && p.companyName.toLowerCase().includes(q);
-      const matchesPhone = p.phone && p.phone.includes(q);
-      const matchesGstin = p.gstin && p.gstin.toLowerCase().includes(q);
+      // Filter by tab
+      if (balanceFilter === 'receivable') return bal > 0;
+      if (balanceFilter === 'payable') return bal < 0;
+      if (balanceFilter === 'settled') return bal === 0;
 
-      return matchesName || matchesCompany || matchesPhone || matchesGstin;
+      // 'all' shows all parties
+      return true;
     })
     .sort((a, b) => {
       const balA = Number(a.currentBalance || 0);
@@ -53,12 +61,21 @@ export default function PartiesList({
         return balB - balA;
       }
 
-      // Group 2: Ones to give payment to come second: Highest payment to give comes first (descending)
-      return Math.abs(balB) - Math.abs(balA);
-    });
+      const isAGive = balA < 0;
+      const isBGive = balB < 0;
 
-  const receivableCount = parties.filter((p) => (p.currentBalance || 0) > 0).length;
-  const payableCount = parties.filter((p) => (p.currentBalance || 0) < 0).length;
+      // Group 2: Ones to give payment to come second
+      if (isAGive && !isBGive) return -1;
+      if (!isAGive && isBGive) return 1;
+
+      // Within Group 2 (Give): Highest payment to give comes first (descending by absolute value)
+      if (isAGive && isBGive) {
+        return Math.abs(balB) - Math.abs(balA);
+      }
+
+      // Group 3: Zero-balance / Settled parties: most recently added first
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
 
   const handleDelete = async (e, id, name) => {
     e.stopPropagation();
@@ -87,7 +104,7 @@ export default function PartiesList({
               Parties Directory
             </h1>
             <span className="text-xs bg-stone-100 text-stone-700 px-2.5 py-0.5 rounded-full font-bold border border-stone-200">
-              {receivableCount + payableCount} Active Dues
+              {parties.length} Total Parties
             </span>
           </div>
           <p className="text-xs text-stone-500 mt-1">
@@ -108,17 +125,17 @@ export default function PartiesList({
         <div className="flex flex-wrap bg-stone-100 p-1 rounded-xl text-xs font-semibold gap-1 border border-stone-200/60">
           <button
             onClick={() => setBalanceFilter('all')}
-            className={`px-4 py-1.5 rounded-lg transition ${
+            className={`px-3 sm:px-4 py-1.5 rounded-lg transition ${
               balanceFilter === 'all'
                 ? 'bg-white text-stone-900 shadow-sm'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            All Active Dues ({receivableCount + payableCount})
+            All Parties ({parties.length})
           </button>
           <button
             onClick={() => setBalanceFilter('receivable')}
-            className={`px-4 py-1.5 rounded-lg transition ${
+            className={`px-3 sm:px-4 py-1.5 rounded-lg transition ${
               balanceFilter === 'receivable'
                 ? 'bg-white text-emerald-800 shadow-sm'
                 : 'text-stone-600 hover:text-stone-900'
@@ -128,13 +145,23 @@ export default function PartiesList({
           </button>
           <button
             onClick={() => setBalanceFilter('payable')}
-            className={`px-4 py-1.5 rounded-lg transition ${
+            className={`px-3 sm:px-4 py-1.5 rounded-lg transition ${
               balanceFilter === 'payable'
                 ? 'bg-white text-rose-800 shadow-sm'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
             To Give ({payableCount})
+          </button>
+          <button
+            onClick={() => setBalanceFilter('settled')}
+            className={`px-3 sm:px-4 py-1.5 rounded-lg transition ${
+              balanceFilter === 'settled'
+                ? 'bg-white text-stone-800 shadow-sm'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Settled / ₹0 ({settledCount})
           </button>
         </div>
 
@@ -152,12 +179,23 @@ export default function PartiesList({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.length === 0 ? (
-          <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-stone-200 text-stone-400 text-sm">
-            No active parties found. Settled (zero balance) accounts are hidden.
+          <div className="col-span-full py-16 text-center bg-white rounded-2xl border border-stone-200 text-stone-400 text-sm space-y-2">
+            <p>No parties found matching this filter.</p>
+            {balanceFilter !== 'all' && (
+              <button
+                onClick={() => setBalanceFilter('all')}
+                className="text-xs text-emerald-700 font-bold hover:underline"
+              >
+                Switch to All Parties ({parties.length})
+              </button>
+            )}
           </div>
         ) : (
           filtered.map((party) => {
             const bal = party.currentBalance || 0;
+            const isReceivable = bal > 0;
+            const isPayable = bal < 0;
+
             return (
               <div
                 key={party._id}
@@ -229,9 +267,9 @@ export default function PartiesList({
                     </span>
                     <div
                       className={`text-base font-black ${
-                        bal > 0
+                        isReceivable
                           ? 'text-emerald-600'
-                          : bal < 0
+                          : isPayable
                           ? 'text-rose-600'
                           : 'text-stone-600'
                       }`}
@@ -240,14 +278,14 @@ export default function PartiesList({
                     </div>
                     <span
                       className={`text-[9px] font-bold uppercase ${
-                        bal > 0
+                        isReceivable
                           ? 'text-emerald-700'
-                          : bal < 0
+                          : isPayable
                           ? 'text-rose-700'
                           : 'text-stone-500'
                       }`}
                     >
-                      {bal > 0 ? "To Collect (Lena)" : bal < 0 ? "To Give (Dena)" : 'Settled'}
+                      {isReceivable ? "To Collect (Lena)" : isPayable ? "To Give (Dena)" : 'Settled (₹0)'}
                     </span>
                   </div>
 
