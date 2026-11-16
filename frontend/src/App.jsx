@@ -108,6 +108,7 @@ export default function App() {
                 onSelectParty={(party) => setSelectedPartyForLedger(party)}
                 onEditParty={handleOpenEditParty}
                 onRefresh={loadAllData}
+                onNavigateToParties={() => setCurrentView('parties')}
               />
             )}
 
