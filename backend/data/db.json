@@ -1,0 +1,216 @@
+{
+  "parties": [
+    {
+      "_id": "p_1",
+      "name": "Ram Sharma",
+      "companyName": "Ram Marble Traders",
+      "type": "customer",
+      "phone": "9876543210",
+      "email": "ram@example.com",
+      "address": "Plot 42, Stone Market, Kishangarh",
+      "gstin": "08AAAAA0000A1Z5",
+      "openingBalance": 15000,
+      "currentBalance": 14000,
+      "notes": "Regular buyer of Makrana White slabs",
+      "status": "active",
+      "createdAt": "2026-11-13T12:41:41.248Z",
+      "updatedAt": "2026-11-13T12:42:40.285Z"
+    },
+    {
+      "_id": "p_2",
+      "name": "Ambaji Stone Suppliers",
+      "companyName": "Ambaji Mining Corp",
+      "type": "supplier",
+      "phone": "9822334455",
+      "email": "ambaji@example.com",
+      "address": "Industrial Area, Abu Road",
+      "gstin": "08BBBBB1111B1Z2",
+      "openingBalance": -25000,
+      "currentBalance": -24400,
+      "notes": "Provides premium white raw marble blocks",
+      "status": "active",
+      "createdAt": "2026-11-13T12:41:41.249Z",
+      "updatedAt": "2026-11-13T12:42:40.286Z"
+    },
+    {
+      "_id": "p_3",
+      "name": "Makrana Granite Works",
+      "companyName": "Makrana Granite Ltd",
+      "type": "supplier",
+      "phone": "9811223344",
+      "email": "makrana@example.com",
+      "address": "Bypass Road, Makrana",
+      "gstin": "08CCCCC2222C1Z9",
+      "openingBalance": -10000,
+      "currentBalance": -9600,
+      "notes": "Black Galaxy & Tiger Skin granite supplier",
+      "status": "active",
+      "createdAt": "2026-11-13T12:41:41.249Z",
+      "updatedAt": "2026-11-13T12:42:40.288Z"
+    }
+  ],
+  "transactions": [
+    {
+      "_id": "t_1794573760283_dist_2",
+      "party": "p_3",
+      "type": "YOU_GAVE",
+      "amount": 200,
+      "date": "2026-11-13T12:42:40.281Z",
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "description": "Paid ₹200 via incoming payment from Ram Sharma. Black granite advance",
+      "isRouted": true,
+      "paymentSplitRef": "split_1794573760282",
+      "routeRole": "target_distributed",
+      "routeNote": "Funded from: Ram Sharma (Total Received: ₹500)",
+      "createdAt": "2026-11-13T12:42:40.283Z",
+      "updatedAt": "2026-11-13T12:42:40.283Z"
+    },
+    {
+      "_id": "t_1794573760283_dist_1",
+      "party": "p_2",
+      "type": "YOU_GAVE",
+      "amount": 300,
+      "date": "2026-11-13T12:42:40.281Z",
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "description": "Paid ₹300 via incoming payment from Ram Sharma. White marble part payment",
+      "isRouted": true,
+      "paymentSplitRef": "split_1794573760282",
+      "routeRole": "target_distributed",
+      "routeNote": "Funded from: Ram Sharma (Total Received: ₹500)",
+      "createdAt": "2026-11-13T12:42:40.283Z",
+      "updatedAt": "2026-11-13T12:42:40.283Z"
+    },
+    {
+      "_id": "t_1794573760282_src",
+      "party": "p_1",
+      "type": "YOU_GOT",
+      "amount": 500,
+      "date": "2026-11-13T12:42:40.281Z",
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "description": "Received ₹500 from Ram Sharma. Routed: ₹300 to Ambaji Stone Suppliers, ₹200 to Makrana Granite Works. Ram payment divided between Ambaji and Makrana suppliers",
+      "isRouted": true,
+      "paymentSplitRef": "split_1794573760282",
+      "routeRole": "source_received",
+      "routeNote": "Routed to: ₹300 to Ambaji Stone Suppliers, ₹200 to Makrana Granite Works",
+      "createdAt": "2026-11-13T12:42:40.283Z",
+      "updatedAt": "2026-11-13T12:42:40.283Z"
+    },
+    {
+      "_id": "t_1794573722760_dist_2",
+      "party": "p_3",
+      "type": "YOU_GAVE",
+      "amount": 200,
+      "date": "2026-11-13T12:42:02.759Z",
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "description": "Paid ₹200 via incoming payment from Ram Sharma. Black granite advance",
+      "isRouted": true,
+      "paymentSplitRef": "split_1794573722760",
+      "routeRole": "target_distributed",
+      "routeNote": "Funded from: Ram Sharma (Total Received: ₹500)",
+      "createdAt": "2026-11-13T12:42:02.760Z",
+      "updatedAt": "2026-11-13T12:42:02.760Z"
+    },
+    {
+      "_id": "t_1794573722760_dist_1",
+      "party": "p_2",
+      "type": "YOU_GAVE",
+      "amount": 300,
+      "date": "2026-11-13T12:42:02.759Z",
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "description": "Paid ₹300 via incoming payment from Ram Sharma. White marble part payment",
+      "isRouted": true,
+      "paymentSplitRef": "split_1794573722760",
+      "routeRole": "target_distributed",
+      "routeNote": "Funded from: Ram Sharma (Total Received: ₹500)",
+      "createdAt": "2026-11-13T12:42:02.760Z",
+      "updatedAt": "2026-11-13T12:42:02.760Z"
+    },
+    {
+      "_id": "t_1794573722760_src",
+      "party": "p_1",
+      "type": "YOU_GOT",
+      "amount": 500,
+      "date": "2026-11-13T12:42:02.759Z",
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "description": "Received ₹500 from Ram Sharma. Routed: ₹300 to Ambaji Stone Suppliers, ₹200 to Makrana Granite Works. Ram payment divided between Ambaji and Makrana suppliers",
+      "isRouted": true,
+      "paymentSplitRef": "split_1794573722760",
+      "routeRole": "source_received",
+      "routeNote": "Routed to: ₹300 to Ambaji Stone Suppliers, ₹200 to Makrana Granite Works",
+      "createdAt": "2026-11-13T12:42:02.760Z",
+      "updatedAt": "2026-11-13T12:42:02.760Z"
+    }
+  ],
+  "splits": [
+    {
+      "_id": "split_1794573760282",
+      "sourceParty": "p_1",
+      "sourceTransaction": "t_1794573760282_src",
+      "totalAmountReceived": 500,
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "date": "2026-11-13T12:42:40.281Z",
+      "description": "Ram payment divided between Ambaji and Makrana suppliers",
+      "distributions": [
+        {
+          "recipientParty": "p_2",
+          "amount": 300,
+          "transactionRef": "t_1794573760283_dist_1",
+          "note": "White marble part payment"
+        },
+        {
+          "recipientParty": "p_3",
+          "amount": 200,
+          "transactionRef": "t_1794573760283_dist_2",
+          "note": "Black granite advance"
+        }
+      ],
+      "retainedAmount": 0,
+      "createdAt": "2026-11-13T12:42:40.283Z",
+      "updatedAt": "2026-11-13T12:42:40.283Z"
+    },
+    {
+      "_id": "split_1794573722760",
+      "sourceParty": "p_1",
+      "sourceTransaction": "t_1794573722760_src",
+      "totalAmountReceived": 500,
+      "paymentMode": "UPI / GPay / PhonePe",
+      "referenceNumber": "UPI-9828374281",
+      "date": "2026-11-13T12:42:02.759Z",
+      "description": "Ram payment divided between Ambaji and Makrana suppliers",
+      "distributions": [
+        {
+          "recipientParty": "p_2",
+          "amount": 300,
+          "transactionRef": "t_1794573722760_dist_1",
+          "note": "White marble part payment"
+        },
+        {
+          "recipientParty": "p_3",
+          "amount": 200,
+          "transactionRef": "t_1794573722760_dist_2",
+          "note": "Black granite advance"
+        }
+      ],
+      "retainedAmount": 0,
+      "createdAt": "2026-11-13T12:42:02.760Z",
+      "updatedAt": "2026-11-13T12:42:02.760Z"
+    }
+  ],
+  "settings": {
+    "businessName": "KM Stonex",
+    "tagline": "Premium Marble, Granite & Natural Stones",
+    "ownerName": "KM Stonex Management",
+    "phone": "9876500000",
+    "email": "info@kmstonex.com",
+    "address": "Marble City, Kishangarh, Rajasthan - 305801",
+    "gstin": "08AABCK1234F1Z8",
+    "currencySymbol": "₹"
+  }
+}
