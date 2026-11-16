@@ -9,8 +9,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPORTS_DIR = path.resolve(__dirname, '../../data/reports');
 
-if (!fs.existsSync(REPORTS_DIR)) {
-  fs.mkdirSync(REPORTS_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(REPORTS_DIR)) {
+    fs.mkdirSync(REPORTS_DIR, { recursive: true });
+  }
+} catch (e) {
+  // Read-only filesystem in serverless environments
 }
 
 let lastWhatsAppRun = null;
