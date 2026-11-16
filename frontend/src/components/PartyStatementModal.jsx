@@ -55,45 +55,83 @@ export default function PartyStatementModal({
 
   if (!isOpen || !party) return null;
 
-  const filtered = transactions.filter((t) => {
-    const tDate = t.date.slice(0, 10);
-    if (startDate && tDate < startDate) return false;
-    if (endDate && tDate > endDate) return false;
-    return true;
+  // 1. Sort all transactions chronologically (oldest to newest)
+  // Handles same-date transactions with sub-second / createdAt precision
+  const allSortedChronological = [...transactions].sort((a, b) => {
+    const timeA = new Date(a.date).getTime();
+    const timeB = new Date(b.date).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    const createA = new Date(a.createdAt || a.date).getTime();
+    const createB = new Date(b.createdAt || b.date).getTime();
+    if (createA !== createB) return createA - createB;
+    return String(a._id || '').localeCompare(String(b._id || ''));
   });
 
-  const sortedChronological = [...filtered].sort(
-    (a, b) => new Date(a.date) - new Date(b.date)
-  );
+  const rawOpeningBal = Number(party.openingBalance || 0);
 
-  let running = Number(party.openingBalance || 0);
-  const ledgerRows = sortedChronological.map((t) => {
-    let debit = 0;
-    let credit = 0;
+  // 2. Real-time ledger final balance computed strictly from transactions + opening balance
+  const fullLedgerFinalBalance = allSortedChronological.reduce((acc, t) => {
+    const amt = Number(t.amount || 0);
+    if (t.type === 'YOU_GAVE' || t.type === 'SALE_BILL') return acc + amt;
+    if (t.type === 'YOU_GOT' || t.type === 'PURCHASE_BILL') return acc - amt;
+    return acc;
+  }, rawOpeningBal);
 
-    if (t.type === 'SALE_BILL') {
-      debit = Number(t.amount);
-      running += debit;
-    } else if (t.type === 'YOU_GOT') {
-      credit = Number(t.amount);
-      running -= credit;
-    } else if (t.type === 'PURCHASE_BILL') {
-      credit = Number(t.amount);
-      running -= credit;
-    } else if (t.type === 'YOU_GAVE') {
-      debit = Number(t.amount);
-      running += debit;
+  const currentBal = fullLedgerFinalBalance;
+
+  // 3. Separate transactions before startDate vs in-range
+  let initialBalanceForPeriod = rawOpeningBal;
+  const inRangeTxns = [];
+
+  for (const t of allSortedChronological) {
+    const tDate = t.date ? String(t.date).slice(0, 10) : '';
+    if (startDate && tDate < startDate) {
+      const amt = Number(t.amount || 0);
+      if (t.type === 'YOU_GAVE' || t.type === 'SALE_BILL') {
+        initialBalanceForPeriod += amt;
+      } else if (t.type === 'YOU_GOT' || t.type === 'PURCHASE_BILL') {
+        initialBalanceForPeriod -= amt;
+      }
+    } else if (!endDate || tDate <= endDate) {
+      inRangeTxns.push(t);
+    }
+  }
+
+  // 4. Compute running balance forward in chronological order
+  let running = initialBalanceForPeriod;
+  const ledgerRows = inRangeTxns.map((t) => {
+    const amt = Number(t.amount || 0);
+    let gave = 0;
+    let got = 0;
+
+    if (t.type === 'YOU_GAVE' || t.type === 'SALE_BILL') {
+      gave = amt;
+      running += gave;
+    } else if (t.type === 'YOU_GOT' || t.type === 'PURCHASE_BILL') {
+      got = amt;
+      running -= got;
     }
 
     return {
       ...t,
-      debit,
-      credit,
+      gave,
+      got,
       runningBalance: running,
     };
   });
 
+  // 5. Reverse for display so the most recent entry is at the top
   const displayRows = [...ledgerRows].reverse();
+
+  // Period totals
+  const totalGivenInPeriod = inRangeTxns.reduce(
+    (sum, t) => sum + (t.type === 'YOU_GAVE' || t.type === 'SALE_BILL' ? Number(t.amount || 0) : 0),
+    0
+  );
+  const totalGotInPeriod = inRangeTxns.reduce(
+    (sum, t) => sum + (t.type === 'YOU_GOT' || t.type === 'PURCHASE_BILL' ? Number(t.amount || 0) : 0),
+    0
+  );
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this khata entry?')) {
@@ -101,7 +139,9 @@ export default function PartyStatementModal({
         await deleteTransaction(id);
         await recalculatePartyBalance(party._id);
         await fetchLedger();
-        onRefreshParties();
+        if (onRefreshParties) {
+          onRefreshParties();
+        }
       } catch (err) {
         alert('Failed to delete transaction: ' + err.message);
       }
@@ -130,19 +170,28 @@ export default function PartyStatementModal({
     window.print();
   };
 
-  const currentBal = party.currentBalance || 0;
   const generateWhatsAppMessage = () => {
-    const msg = currentBal > 0
-      ? `Namaskar ${party.name} ji, this is a friendly reminder from KM Stonex regarding your outstanding balance of ₹${Math.abs(currentBal)}. Kindly clear the pending dues at your earliest convenience. Thank you!`
-      : `Namaskar ${party.name} ji, this is an account statement update from KM Stonex. Your current account balance is ₹${Math.abs(currentBal)}. Thank you for your partnership!`;
+    const msg =
+      currentBal > 0
+        ? `Namaskar ${party.name} ji, this is a friendly reminder from KM Stonex regarding your outstanding balance of ₹${Math.abs(currentBal).toLocaleString('en-IN')}. Kindly clear the pending dues at your earliest convenience. Thank you!`
+        : `Namaskar ${party.name} ji, this is an account statement update from KM Stonex. Your current account balance is ₹${Math.abs(currentBal).toLocaleString('en-IN')}. Thank you for your partnership!`;
     navigator.clipboard.writeText(msg);
     setCopiedReminder(true);
     setTimeout(() => setCopiedReminder(false), 2500);
   };
 
+  const openingRowDate = party.createdAt
+    ? new Date(party.createdAt).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '-';
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-stone-200 overflow-hidden flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:border-none">
+        {/* Header */}
         <div className="bg-[#0b1f1a] p-5 text-white flex items-center justify-between border-b border-emerald-900/60 print:bg-white print:text-black print:border-b-2 print:border-black">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center font-black text-xl text-amber-200 shadow-md border border-emerald-500/30 print:hidden">
@@ -211,6 +260,7 @@ export default function PartyStatementModal({
           </div>
         </div>
 
+        {/* Current Balance Banner */}
         <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -229,7 +279,7 @@ export default function PartyStatementModal({
                 ₹{Math.abs(currentBal).toLocaleString('en-IN')}
               </span>
               <span
-                className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
                   currentBal > 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : currentBal < 0
@@ -245,21 +295,24 @@ export default function PartyStatementModal({
               </span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Opening Balance: ₹{party.openingBalance || 0}
+              Opening Balance: ₹{Math.abs(rawOpeningBal).toLocaleString('en-IN')}{' '}
+              <span className="text-[10px] font-semibold text-slate-600">
+                ({rawOpeningBal > 0 ? "You'll Get" : rawOpeningBal < 0 ? "You'll Give" : 'Settled ₹0'})
+              </span>
             </p>
           </div>
 
-          <div className="flex items-center gap-2 print:hidden">
+          <div className="flex items-center gap-2.5 print:hidden">
             <button
               onClick={() => onAddTransaction(party._id, 'YOU_GAVE')}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition"
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition"
             >
               <ArrowUpRight className="w-4 h-4" />
-              <span>You Gave (Diya)</span>
+              <span>You Give (Diya)</span>
             </button>
             <button
               onClick={() => onAddTransaction(party._id, 'YOU_GOT')}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition"
             >
               <ArrowDownLeft className="w-4 h-4" />
               <span>You Got (Aaya)</span>
@@ -267,6 +320,7 @@ export default function PartyStatementModal({
           </div>
         </div>
 
+        {/* Date Filter & Status */}
         <div className="px-5 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between text-xs text-slate-600 print:hidden">
           <div className="flex items-center gap-2">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -299,7 +353,7 @@ export default function PartyStatementModal({
 
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-slate-500">
-              Total {displayRows.length} transactions
+              Total {inRangeTxns.length} entries
             </span>
             <button
               onClick={fetchLedger}
@@ -311,14 +365,11 @@ export default function PartyStatementModal({
           </div>
         </div>
 
+        {/* Ledger Table */}
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="py-12 text-center text-slate-400 text-sm">
               Loading ledger statements...
-            </div>
-          ) : displayRows.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-sm">
-              No transactions recorded yet for {party.name}. Click "You Got" or "You Gave" above to add the first entry!
             </div>
           ) : (
             <table className="w-full text-left text-xs border-collapse">
@@ -327,92 +378,216 @@ export default function PartyStatementModal({
                   <th className="py-2.5 px-3">Date</th>
                   <th className="py-2.5 px-3">Entry Details / Particulars</th>
                   <th className="py-2.5 px-3">Payment Mode</th>
-                  <th className="py-2.5 px-3 text-right text-rose-700">You Gave (-)</th>
-                  <th className="py-2.5 px-3 text-right text-emerald-700">You Got (+)</th>
+                  <th className="py-2.5 px-3 text-right text-rose-700">You Give (Diya)</th>
+                  <th className="py-2.5 px-3 text-right text-emerald-700">You Got (Aaya)</th>
                   <th className="py-2.5 px-3 text-right">Balance</th>
                   <th className="py-2.5 px-2 text-center print:hidden">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {displayRows.map((txn) => (
-                  <tr
-                    key={txn._id}
-                    className="hover:bg-slate-50 transition duration-150"
-                  >
-                    <td className="py-3 px-3 font-medium text-slate-600 whitespace-nowrap">
-                      {new Date(txn.date).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
-                    </td>
+                {/* Transaction Rows (Newest to Oldest) */}
+                {displayRows.map((txn) => {
+                  const txnDateStr = new Date(txn.date).toLocaleDateString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  });
+                  const timeStr = txn.createdAt
+                    ? new Date(txn.createdAt).toLocaleTimeString('en-IN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                    : null;
 
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-800">
-                        {txn.type.replace('_', ' ')}
-                      </div>
-                      {txn.description && (
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {txn.description}
-                        </p>
-                      )}
-                      {txn.referenceNumber && (
-                        <span className="inline-block text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded mr-1">
-                          Ref: {txn.referenceNumber}
-                        </span>
-                      )}
-                      {txn.isRouted && (
-                        <span className="inline-flex items-center gap-1 text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-semibold">
-                          <Sparkles className="w-2.5 h-2.5" /> Routed Transfer
-                        </span>
-                      )}
-                    </td>
+                  return (
+                    <tr
+                      key={txn._id}
+                      className="hover:bg-slate-50 transition duration-150"
+                    >
+                      <td className="py-3 px-3 font-medium text-slate-600 whitespace-nowrap">
+                        <div>{txnDateStr}</div>
+                        {timeStr && (
+                          <div className="text-[10px] text-slate-400 font-normal">{timeStr}</div>
+                        )}
+                      </td>
 
-                    <td className="py-3 px-3 text-slate-600">
-                      {txn.paymentMode || 'Cash'}
-                    </td>
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-slate-800">
+                          {txn.type === 'YOU_GOT'
+                            ? 'Payment Received (You Got)'
+                            : txn.type === 'YOU_GAVE'
+                            ? 'Payment Given (You Give)'
+                            : txn.type === 'SALE_BILL'
+                            ? 'Sale Bill'
+                            : txn.type === 'PURCHASE_BILL'
+                            ? 'Purchase Bill'
+                            : txn.type.replace('_', ' ')}
+                        </div>
+                        {txn.description && (
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {txn.description}
+                          </p>
+                        )}
+                        {txn.referenceNumber && (
+                          <span className="inline-block text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded mr-1">
+                            Ref: {txn.referenceNumber}
+                          </span>
+                        )}
+                        {txn.isRouted && (
+                          <span className="inline-flex items-center gap-1 text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-semibold">
+                            <Sparkles className="w-2.5 h-2.5" /> Routed Transfer
+                          </span>
+                        )}
+                      </td>
 
-                    <td className="py-3 px-3 text-right font-bold text-rose-600">
-                      {txn.debit > 0 ? `₹${txn.debit.toLocaleString('en-IN')}` : '-'}
-                    </td>
+                      <td className="py-3 px-3 text-slate-600">
+                        {txn.paymentMode || 'Cash'}
+                      </td>
 
-                    <td className="py-3 px-3 text-right font-bold text-emerald-600">
-                      {txn.credit > 0 ? `₹${txn.credit.toLocaleString('en-IN')}` : '-'}
-                    </td>
+                      <td className="py-3 px-3 text-right font-bold text-rose-600">
+                        {txn.gave > 0 ? `₹${txn.gave.toLocaleString('en-IN')}` : '-'}
+                      </td>
 
-                    <td className="py-3 px-3 text-right font-black">
-                      <span
-                        className={
-                          txn.runningBalance > 0
-                            ? 'text-emerald-700'
+                      <td className="py-3 px-3 text-right font-bold text-emerald-600">
+                        {txn.got > 0 ? `₹${txn.got.toLocaleString('en-IN')}` : '-'}
+                      </td>
+
+                      <td className="py-3 px-3 text-right">
+                        <div
+                          className={`font-black text-sm ${
+                            txn.runningBalance > 0
+                              ? 'text-emerald-700'
+                              : txn.runningBalance < 0
+                              ? 'text-rose-700'
+                              : 'text-slate-600'
+                          }`}
+                        >
+                          ₹{Math.abs(txn.runningBalance).toLocaleString('en-IN')}
+                        </div>
+                        <div
+                          className={`text-[9px] font-bold uppercase tracking-wider ${
+                            txn.runningBalance > 0
+                              ? 'text-emerald-600'
+                              : txn.runningBalance < 0
+                              ? 'text-rose-600'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {txn.runningBalance > 0
+                            ? "You'll Get"
                             : txn.runningBalance < 0
-                            ? 'text-rose-700'
-                            : 'text-slate-600'
-                        }
-                      >
-                        ₹{Math.abs(txn.runningBalance).toLocaleString('en-IN')}
-                        <span className="text-[9px] font-bold ml-1 uppercase">
-                          {txn.runningBalance > 0 ? 'Dr' : txn.runningBalance < 0 ? 'Cr' : ''}
-                        </span>
-                      </span>
-                    </td>
+                            ? "You'll Give"
+                            : 'Settled'}
+                        </div>
+                      </td>
 
-                    <td className="py-3 px-2 text-center print:hidden">
-                      <button
-                        onClick={() => handleDelete(txn._id)}
-                        className="text-slate-300 hover:text-rose-600 p-1 rounded transition"
-                        title="Delete entry"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="py-3 px-2 text-center print:hidden">
+                        <button
+                          onClick={() => handleDelete(txn._id)}
+                          className="text-slate-300 hover:text-rose-600 p-1 rounded transition"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Opening Balance Row */}
+                <tr className="bg-amber-50/50 border-t-2 border-dashed border-amber-200/80 font-medium text-slate-700">
+                  <td className="py-3 px-3 whitespace-nowrap text-slate-500">
+                    {openingRowDate}
+                  </td>
+                  <td className="py-3 px-3">
+                    <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                      <span>{startDate ? `Opening Balance (Before ${startDate})` : 'Opening Khata Balance'}</span>
+                    </div>
+                    <p className="text-[10px] text-amber-800/80 mt-0.5">
+                      Initial balance recorded when account was opened
+                    </p>
+                  </td>
+                  <td className="py-3 px-3 text-slate-400 font-medium">-</td>
+                  <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
+                  <td className="py-3 px-3 text-right text-slate-400 font-normal">-</td>
+                  <td className="py-3 px-3 text-right">
+                    <div
+                      className={`font-black text-sm ${
+                        initialBalanceForPeriod > 0
+                          ? 'text-emerald-700'
+                          : initialBalanceForPeriod < 0
+                          ? 'text-rose-700'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      ₹{Math.abs(initialBalanceForPeriod).toLocaleString('en-IN')}
+                    </div>
+                    <div
+                      className={`text-[9px] font-bold uppercase tracking-wider ${
+                        initialBalanceForPeriod > 0
+                          ? 'text-emerald-600'
+                          : initialBalanceForPeriod < 0
+                          ? 'text-rose-600'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      {initialBalanceForPeriod > 0
+                        ? "You'll Get"
+                        : initialBalanceForPeriod < 0
+                        ? "You'll Give"
+                        : 'Settled'}
+                    </div>
+                  </td>
+                  <td className="py-3 px-2 text-center text-slate-300 print:hidden">-</td>
+                </tr>
               </tbody>
+
+              {/* Summary / Total Footer */}
+              <tfoot className="bg-slate-100/90 font-bold border-t-2 border-slate-300 text-xs">
+                <tr>
+                  <td colSpan={3} className="py-2.5 px-3 text-slate-700">
+                    Period Total ({inRangeTxns.length} entries)
+                  </td>
+                  <td className="py-2.5 px-3 text-right text-rose-700 font-black">
+                    {totalGivenInPeriod > 0 ? `₹${totalGivenInPeriod.toLocaleString('en-IN')}` : '-'}
+                  </td>
+                  <td className="py-2.5 px-3 text-right text-emerald-700 font-black">
+                    {totalGotInPeriod > 0 ? `₹${totalGotInPeriod.toLocaleString('en-IN')}` : '-'}
+                  </td>
+                  <td className="py-2.5 px-3 text-right">
+                    <div
+                      className={`font-black text-sm ${
+                        running > 0
+                          ? 'text-emerald-700'
+                          : running < 0
+                          ? 'text-rose-700'
+                          : 'text-slate-700'
+                      }`}
+                    >
+                      ₹{Math.abs(running).toLocaleString('en-IN')}
+                    </div>
+                    <div
+                      className={`text-[9px] font-bold uppercase tracking-wider ${
+                        running > 0
+                          ? 'text-emerald-600'
+                          : running < 0
+                          ? 'text-rose-600'
+                          : 'text-slate-500'
+                      }`}
+                    >
+                      {running > 0 ? "You'll Get" : running < 0 ? "You'll Give" : 'Settled'}
+                    </div>
+                  </td>
+                  <td className="print:hidden"></td>
+                </tr>
+              </tfoot>
             </table>
           )}
         </div>
 
+        {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 print:hidden">
           <span>
             KM Stonex Khata • Certified Double Entry Accounting
